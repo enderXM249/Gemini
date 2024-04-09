@@ -9,6 +9,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
+import pdfplumber
+from docx import Document
 
 
 load_dotenv()
@@ -24,15 +26,21 @@ genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 # model = genai.GenerativeModel('gemini-pro')
 
 
-def get_pdf_text(pdf_docs):
-    text=""
-    for pdf in pdf_docs:
-        pdf_reader= PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text+= page.extract_text()
-    return  text
+# Function to extract text from PDF
+def extract_text_from_pdf(uploaded_file):
+    with pdfplumber.open(uploaded_file) as pdf:
+        text = ""
+        for page in pdf.pages:
+            text += page.extract_text()
+    return text
 
-
+# Function to extract text from DOCX
+def extract_text_from_docx(uploaded_file):
+    doc = Document(uploaded_file)
+    full_text = []
+    for paragraph in doc.paragraphs:
+        full_text.append(paragraph.text)
+    return '\n'.join(full_text)
 
 def get_text_chunks(text):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
@@ -79,7 +87,7 @@ def user_input(user_question):
         {"input_documents":docs, "question": user_question}
         , return_only_outputs=True)
 
-    print(response)
+    # print(response)
     st.write("Reply: ", response["output_text"])
 
 
@@ -94,13 +102,20 @@ def main():
 
     with st.sidebar:
         st.title("Menu:")
-        pdf_docs = st.file_uploader("Upload your PDF Files and Click on the Submit & Process Button", accept_multiple_files=True)
+        pdf_docs = st.file_uploader("Upload a PDF or DOCX file", type=["pdf", "docx"],accept_multiple_files=True) 
         if st.button("Submit & Process"):
             with st.spinner("Processing..."):
-                raw_text = get_pdf_text(pdf_docs)
-                text_chunks = get_text_chunks(raw_text)
+             if pdf_docs is not None:
+                for uploaded_file in pdf_docs:
+                    file_extension = os.path.splitext(uploaded_file.name)[1]
+                if file_extension == ".pdf":
+                    text = extract_text_from_pdf(uploaded_file)
+                elif file_extension == ".docx":
+                    text = extract_text_from_docx(uploaded_file)
+                    
+                text_chunks = get_text_chunks(text)
                 get_vector_store(text_chunks)
-                st.success("Done")
+                st.success("Done")    
 
 
 
